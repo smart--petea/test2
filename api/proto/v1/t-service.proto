@@ -1,0 +1,49 @@
+syntax = "proto3";
+package v1;
+
+message TServiceRequest{
+    repeated string fsyms = 1;
+    repeated string tsyms = 2;
+}
+
+message TRawCurrency {
+    double price = 1;
+    double lastupdate = 2;
+    double volume24hour = 3;
+    double volume24hourto = 4;
+    double open24hour = 5;
+    double high24hour = 6;
+    double low24hour = 7;
+    double change24hour = 8;
+    double changepct24hour = 9;
+    double supply = 10;
+    double mktcap = 11;
+}
+
+message TRaw {
+    map<string, TRawCurrency> currencies = 1;
+}
+
+message TDisplayCurrency {
+    double price = 1;
+    double volume24hour = 2;
+    double volume24hourto = 3;
+    double open24hour = 4;
+    double high24hour = 5;
+    double low24hour = 6;
+    double change24hour = 7;
+    double changepct24hour = 8;
+}
+
+message TDisplay {
+    map<string, TDisplayCurrency> currencies = 1;
+}
+
+message TServiceResponse{
+    map<string, TRaw> raw = 1;
+    map<string, TDisplay> display = 2;
+}
+
+service TService {
+    rpc Get(TServiceRequest) returns (TServiceResponse);
+}
