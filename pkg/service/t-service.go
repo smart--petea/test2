@@ -15,6 +15,9 @@ import (
     "os"
     "os/signal"
     "net"
+    "net/http"
+    "io/ioutil"
+    "encoding/json"
 )
 
 // tServiceServer is implementation of proto.TServiceServer proto interface
@@ -66,6 +69,33 @@ func (t *tServiceServer) Get(ctx context.Context, req *proto.TServiceRequest) (*
         Id:  id,
     }, nil
     */
+
+    resp, err := http.Get("https://min-api.cryptocompare.com/data/pricemultifull?fsyms=BTC&tsyms=USD,EUR")
+    if err != nil {
+        //todo
+        //1. ask the db for the last info
+        panic(err)
+    }
+    defer resp.Body.Close()
+    body, err := ioutil.ReadAll(resp.Body)
+    if err != nil {
+        panic(err)
+    }
+    log.Printf("response %+v", string(body))
+
+    var rawDisplay struct{
+        RAW string
+        DISPLAY string
+    }
+    err = json.Unmarshal(body, &rawDisplay)
+    if err != nil {
+        //todo
+        fmt.Printf("%+v", err)
+        panic(err)
+    }
+    log.Printf("rawDisplay %+v", rawDisplay)
+    
+
     rawCurrencies := make(map[string]*proto.TRawCurrency)
     rawCurrencies["USD"] = &proto.TRawCurrency{
         Price: 60600.96,

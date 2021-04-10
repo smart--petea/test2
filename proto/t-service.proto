@@ -7,17 +7,17 @@ message TServiceRequest{
 }
 
 message TRawCurrency {
-    double price = 1;
-    double lastupdate = 2;
-    double volume24hour = 3;
-    double volume24hourto = 4;
-    double open24hour = 5;
-    double high24hour = 6;
-    double low24hour = 7;
-    double change24hour = 8;
-    double changepct24hour = 9;
-    double supply = 10;
-    double mktcap = 11;
+    double PRICE = 1;
+    int64  LASTUPDATE = 2;
+    double VOLUME24HOUR = 3;
+    double VOLUME24HOURTO = 4;
+    double OPEN24HOUR = 5;
+    double HIGH24HOUR = 6;
+    double LOW24HOUR = 7;
+    double CHANGE24HOUR = 8;
+    double CHANGEPCT24HOUR = 9;
+    int64  SUPPLY = 10;
+    double MKTCAP = 11;
 }
 
 message TRaw {
@@ -25,14 +25,14 @@ message TRaw {
 }
 
 message TDisplayCurrency {
-    double price = 1;
-    double volume24hour = 2;
-    double volume24hourto = 3;
-    double open24hour = 4;
-    double high24hour = 5;
-    double low24hour = 6;
-    double change24hour = 7;
-    double changepct24hour = 8;
+    string PRICE = 1;
+    string VOLUME24HOUR = 2;
+    string VOLUME24HOURTO = 3;
+    string OPEN24HOUR = 4;
+    string HIGH24HOUR = 5;
+    string LOW24HOUR = 6;
+    string CHANGE24HOUR = 7;
+    string CHANGEPCT24HOUR = 8;
 }
 
 message TDisplay {
@@ -40,8 +40,8 @@ message TDisplay {
 }
 
 message TServiceResponse{
-    map<string, TRaw> raw = 1;
-    map<string, TDisplay> display = 2;
+    map<string, TRaw> RAW = 1;
+    map<string, TDisplay> DISPLAY = 2;
 }
 
 service TService {
