@@ -8,11 +8,7 @@ import (
     "time"
     "google.golang.org/grpc"
 
-    "github.com/smart--petea/test2/pkg/api/v1"
-)
-
-const (
-    apiVersion = "v1"
+    "github.com/smart--petea/test2/pkg/proto"
 )
 
 func main() {
@@ -26,12 +22,12 @@ func main() {
     defer conn.Close()
     log.Println(" connection state ====> ", conn.GetState())
 
-    c := v1.NewTServiceClient(conn)
+    c := proto.NewTServiceClient(conn)
 
     ctx, cancel := context.WithTimeout(context.Background(), 5 * time.Second)
     defer cancel()
 
-    req := v1.TServiceRequest {
+    req := proto.TServiceRequest {
         Fsyms: []string{"BTC"},
         Tsyms: []string{"USD,EUR"},
     }

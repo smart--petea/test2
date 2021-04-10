@@ -4,11 +4,11 @@ import (
     "fmt"
     "os"
 
-    cmd "github.com/smart--petea/test2/pkg/cmd/service"
+    service "github.com/smart--petea/test2/pkg/service"
 )
 
 func main() {
-    if err := cmd.RunService(); err != nil {
+    if err := service.Run(); err != nil {
         fmt.Fprintf(os.Stderr, "%v\n", err)
     }
 }
