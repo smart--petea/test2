@@ -20,6 +20,7 @@ import (
     "encoding/json"
     "strings"
      "github.com/spf13/viper"
+     "time"
 )
 
 func init() {
@@ -41,41 +42,7 @@ func NewTServiceServer(db *sql.DB) proto.TServiceServer {
     return &tServiceServer{db:db}
 }
 
-// connect returns SQL database connection from the pool
-/*
-func (s *userServiceServer) connect(ctx context.Context) (*sql.Conn, error) {
-    c, err := s.db.Conn(ctx)
-    if err != nil {
-        return nil, status.Error(codes.Unknown, "failed to connect to database-> "+err.Error())
-    }
-    return c, nil
-}
-*/
-
-// Create new user
 func (t *tServiceServer) Get(ctx context.Context, req *proto.TServiceRequest) (*proto.TServiceResponse, error) {
-    /*
-    conn, err := s.connect(ctx)
-    if err != nil {
-        log.Println("Error in connecting to database", err)
-    }
-    defer conn.Close()
-
-    result, err := conn.ExecContext(context.Background(), "Insert into user(name, email) values(?,?)", req.GetUser().GetName(), req.GetUser().GetEmail())
-    if err != nil {
-        return nil, status.Error(codes.Unknown, "failed to insert into user-> "+err.Error())
-    }
-
-    id, err := result.LastInsertId()
-    if err != nil {
-        return nil, status.Error(codes.Unknown, "failed to retrieve id for created ToDo-> "+err.Error())
-    }
-
-    return &proto.CreateUserResponse{
-        Id:  id,
-    }, nil
-    */
-
     if err := ValidateFsyms(req.Fsyms); err != nil {
         return nil, status.Error(codes.InvalidArgument, err.Error())
     }
@@ -172,7 +139,10 @@ func Run() error {
     protoAPI := NewTServiceServer(db)
     ctx := context.Background()
 
-    //RunScheduler(ctx)
+    if err := RunScheduler(ctx, db); err != nil {
+        return err
+    }
+
     return RunServer(ctx, protoAPI)
 }
 
@@ -209,31 +179,146 @@ func GetDB() (*sql.DB, error) {
     return db, nil
 }
 
-/*
 func RunScheduler(ctx context.Context, db *sql.DB) error {
-    interval := viper.GetInt("scheduler.interval", 0)
+    interval := viper.GetInt("scheduler.interval")
     if interval < 1 {
         return fmt.Errorf("Wrong scheduler interval %d", interval)
     }
 
-    ticker := time.NewTicker(interval * timeSecond)
+    ticker := time.NewTicker(time.Duration(interval) * time.Second)
     log.Printf("starting Scheduler at interval %d seconds", interval)
+
+    fsyms := strings.Join(viper.GetStringSlice("currencies.fsyms"), ",")
+    tsyms := strings.Join(viper.GetStringSlice("currencies.tsyms"), ",")
+
     go func() {
         for {
             select {
             case <- ticker.C:
+                tServiceResponse, err := GetFromHttp(ctx, fsyms, tsyms)
+                if err != nil {
+                    log.Printf("[Scheduler] something wrong msg='%s'", err.Error())
+                    continue
+                } 
 
+                log.Printf("[Scheduler] saving...")
+                DbSaveTServiceResponse(ctx, db, tServiceResponse)
             case <- ctx.Done():
                 ticker.Stop()
-                log.Printf("shutting down Scheduler")
+                log.Printf("[Scheduler] shutting down ...")
                 return
             }
         }
-    }
+    }()
 
     return nil
 }
-*/
+
+func DbGetNextId(ctx context.Context, db *sql.DB) (int, error) {
+    query := fmt.Sprintf("SELECT COALESCE(MAX(id), 0) + 1 as id FROM pairs")
+    rows, err := db.QueryContext(ctx, query)
+    if err != nil {
+        return 0, err
+    }
+    defer rows.Close()
+
+    rows.Next()
+
+    var id int
+    if err := rows.Scan(&id); err != nil {
+        return 0, err
+    }
+
+    return id, nil
+}
+
+func DbGetIdFsymTsym(ctx context.Context, db *sql.DB, fsym, tsym string) (int, error) {
+    query := fmt.Sprintf("SELECT id FROM pairs WHERE fsym='%s' AND tsym='%s' LIMIT 1", fsym, tsym)
+    rows, err := db.QueryContext(ctx, query)
+    if err != nil {
+        return 0, err
+    }
+    defer rows.Close()
+
+    if rows.Next() == false {
+        return 0, nil
+    }
+
+    var id int
+    if err := rows.Scan(&id); err != nil {
+        return 0, err
+    }
+
+    return id, nil
+}
+
+func DbGetInsertFsymTsym(ctx context.Context, db *sql.DB, id int, fsym, tsym, raw, display string) error {
+    query := `INSERT INTO public.pairs (id, fsym, tsym, raw, display) VALUES(%d, '%s', '%s', '%s', '%s')`
+    query = fmt.Sprintf(query, id, fsym, tsym, raw, display)
+    rows, err := db.QueryContext(ctx, query)
+    if err != nil {
+        return err
+    }
+    defer rows.Close()
+
+    return nil
+}
+
+func DbGetUpdateFsymTsym(ctx context.Context, db *sql.DB, id int, fsym, tsym, raw, display string) error {
+    query := `UPDATE public.pairs SET fsym='%s', tsym='%s', updated_at=NOW(), raw='%s', display='%s' WHERE id=%d`
+    query = fmt.Sprintf(query, fsym, tsym, raw, display, id)
+    rows, err := db.QueryContext(ctx, query)
+    if err != nil {
+        return err
+    }
+    defer rows.Close()
+
+    return nil
+}
+
+func DbSaveTServiceResponse(ctx context.Context, db *sql.DB, tServiceResponse *proto.TServiceResponse) {
+    for fsym, fsymTRaw := range tServiceResponse.RAW {
+        for tsym, tsymRawCurrency := range fsymTRaw.Currencies {
+            id, err := DbGetIdFsymTsym(ctx, db, fsym, tsym)
+            if err != nil {
+                log.Printf("error %+v\n", err)
+            }
+
+            tsymDisplayCurrency := tServiceResponse.DISPLAY[fsym].Currencies[tsym]
+            display, err := json.Marshal(tsymDisplayCurrency)
+            if err != nil {
+                log.Printf("error %+v\n", err)
+                continue
+            }
+
+            raw, err := json.Marshal(tsymRawCurrency)
+            if err != nil {
+                log.Printf("error %+v\n", err)
+                continue
+            }
+
+            if id == 0 {
+                id, err := DbGetNextId(ctx, db)
+                if err != nil {
+                    log.Printf("error %+v\n", err)
+                    continue
+                }
+
+                err = DbGetInsertFsymTsym(ctx, db, id, fsym, tsym, string(raw), string(display))
+                if err != nil {
+                    log.Printf("error %+v\n", err)
+                    continue
+                }
+            } else {
+                err := DbGetUpdateFsymTsym(ctx, db, id, fsym, tsym, string(raw), string(display))
+                if err != nil {
+                    log.Printf("error %+v\n", err)
+                    continue
+                }
+            }
+        }
+    }
+}
 
 func RunServer(ctx context.Context, protoAPI proto.TServiceServer) error {
     grpcHost := viper.GetString("grpc.host")
