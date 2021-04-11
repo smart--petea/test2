@@ -1,57 +1,81 @@
 package restserver
 
 import (
-    "log"
     "context"
-    //"github.com/golang/protobuf/ptypes/empty"
-    //"google.golang.org/grpc/codes"
-    //"google.golang.org/grpc/status"
     "google.golang.org/grpc"
-
     "github.com/smart--petea/test2/pkg/proto"
     "github.com/smart--petea/test2/pkg/common"
-    "flag"
     "github.com/gin-gonic/gin"
     "time"
+    "strings"
+    "github.com/spf13/viper"
 )
 
 func init() {
-    common.ConfigLog("restserver") 
+    service :="restserver"
+    if err := common.InitLogForService(service); err != nil {
+        panic(err)
+    }
+
+    if err := common.InitViperForService(service); err != nil {
+        panic(err)
+    }
 }
 
 func Run() error {
-    address := flag.String("server", "", "gRPC server in format host:port")
-    flag.Parse()
-
-    serviceConn, err := grpc.Dial(*address, grpc.WithInsecure())
-    if err != nil {
-        log.Fatalf("did not connect: %v", err)
-    }
-    defer serviceConn.Close()
-    log.Println(" connection state ====> ", serviceConn.GetState())
-
     ginServer := gin.Default()
     ginServer.GET("/service/price", func(c *gin.Context) {
-        service := proto.NewTServiceClient(serviceConn)
+        fsyms := c.Query("fsyms")
+        tsyms := c.Query("tsyms")
 
-        ctx, cancel := context.WithTimeout(context.Background(), 5 * time.Second)
-        defer cancel()
-
-        seviceReq := proto.TServiceRequest {
-            Fsyms: []string{"BTC"},
-            Tsyms: []string{"USD,EUR"},
+        if fsyms == "" {
+            c.JSON(400, gin.H{"msg": "fsyms not set"})
+            return
         }
 
-        serviceRes, err := service.Get(ctx, &seviceReq)
+        if tsyms == "" {
+            c.JSON(400, gin.H{"msg": "tsyms not set"})
+            return
+        }
+
+        Fsyms := strings.Split(fsyms, ",")
+        Tsyms := strings.Split(tsyms, ",")
+
+        serviceRes, err := serviceCall(Fsyms, Tsyms)
         if err != nil {
-            //todo
-            log.Fatalf("Create user failed: %v", err)
+            c.JSON(500, gin.H{"msg": err.Error()})
+            return
         }
 
         c.JSON(200, serviceRes)
     })
 
-    ginServer.Run()
+    httpHost := viper.GetString("http.host")
+    httpPort := viper.GetString("http.port")
+    httpAddress := httpHost + ":" + httpPort 
+    ginServer.Run(httpAddress)
 
     return nil
+}
+
+func serviceCall(fsyms, tsyms []string) (*proto.TServiceResponse, error) {
+    grpcHost := viper.GetString("grpc.host")
+    grpcPort := viper.GetString("grpc.port")
+    grpcAddress := grpcHost + ":" +  grpcPort
+
+    serviceConn, err := grpc.Dial(grpcAddress, grpc.WithInsecure())
+    if err != nil {
+        return nil, err
+    }
+    defer serviceConn.Close()
+
+
+    service := proto.NewTServiceClient(serviceConn)
+    ctx, cancel := context.WithTimeout(context.Background(), 5 * time.Second)
+    defer cancel()
+
+    return service.Get(ctx, &proto.TServiceRequest{
+        Fsyms: fsyms,
+        Tsyms: tsyms,
+    })
 }

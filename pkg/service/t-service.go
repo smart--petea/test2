@@ -11,7 +11,6 @@ import (
 
     "github.com/smart--petea/test2/pkg/proto"
     "github.com/smart--petea/test2/pkg/common"
-    "flag"
     "fmt"
     "os"
     "os/signal"
@@ -19,10 +18,19 @@ import (
     "net/http"
     "io/ioutil"
     "encoding/json"
+    "strings"
+     "github.com/spf13/viper"
 )
 
 func init() {
-    common.ConfigLog("service")
+    service :="service"
+    if err := common.InitLogForService(service); err != nil {
+        panic(err)
+    }
+
+    if err := common.InitViperForService(service); err != nil {
+        panic(err)
+    }
 }
 
 // tServiceServer is implementation of proto.TServiceServer proto interface
@@ -75,7 +83,10 @@ func (t *tServiceServer) Get(ctx context.Context, req *proto.TServiceRequest) (*
     }, nil
     */
 
-    resp, err := http.Get("https://min-api.cryptocompare.com/data/pricemultifull?fsyms=BTC&tsyms=USD,EUR")
+    fsyms := strings.Join(req.Fsyms, ",")
+    tsyms := strings.Join(req.Tsyms, ",")
+    url := fmt.Sprintf("https://min-api.cryptocompare.com/data/pricemultifull?fsyms=%s&tsyms=%s", fsyms, tsyms)
+    resp, err := http.Get(url)
     if err != nil {
         //todo
         //1. ask the db for the last info
@@ -99,6 +110,7 @@ func (t *tServiceServer) Get(ctx context.Context, req *proto.TServiceRequest) (*
     return &tServiceResponse, nil
 }
 
+/*
 type Config struct {
     GRPCPort string
     DatastoreDBHost string
@@ -106,10 +118,12 @@ type Config struct {
     DatastoreDBPassword string
     DatastoreDBSchema string
 }
+*/
 
 func Run() error {
     ctx := context.Background()
 
+    /*
     var cfg Config
     flag.StringVar(&cfg.GRPCPort, "grpc-port", "", "gRPC port to bind")
     flag.StringVar(&cfg.DatastoreDBHost, "db-host", "", "Database host")
@@ -117,10 +131,7 @@ func Run() error {
     flag.StringVar(&cfg.DatastoreDBPassword, "db-password", "", "Database password")
     flag.StringVar(&cfg.DatastoreDBSchema, "db-schema", "", "Database schema")
     flag.Parse()
-
-    if len(cfg.GRPCPort) == 0 {
-        return fmt.Errorf("invalid TCP port for gRPC server: '%s'", cfg.GRPCPort)
-    }
+    */
 
     /*
     param := "parseTime=true"
@@ -145,11 +156,15 @@ func Run() error {
 
     protoAPI := NewTServiceServer()
 
-    return RunServer(ctx, protoAPI, cfg.GRPCPort)
+    return RunServer(ctx, protoAPI)
 }
 
-func RunServer(ctx context.Context, protoAPI proto.TServiceServer, port string) error {
-    listen, err := net.Listen("tcp", ":"+port)
+func RunServer(ctx context.Context, protoAPI proto.TServiceServer) error {
+    grpcHost := viper.GetString("grpc.host")
+    grpcPort := viper.GetString("grpc.port")
+    grpcAddress := grpcHost + ":" +  grpcPort
+
+    listen, err := net.Listen("tcp", grpcAddress)
     if err != nil {
         return err
     }
