@@ -1,40 +1,13 @@
 package main
 
 import (
-//    "github.com/golang/protobuf/ptypes/empty"
-    "context"
-    "flag"
-    "log"
-    "time"
-    "google.golang.org/grpc"
-
-    "github.com/smart--petea/test2/pkg/proto"
+    "github.com/smart--petea/test2/pkg/restserver"
+    "os"
+    "fmt"
 )
 
 func main() {
-    address := flag.String("server", "", "gRPC server in format host:port")
-    flag.Parse()
-
-    conn, err := grpc.Dial(*address, grpc.WithInsecure())
-    if err != nil {
-        log.Fatalf("did not connect: %v", err)
+    if err := restserver.Run(); err != nil {
+        fmt.Fprintf(os.Stderr, "%v\n", err)
     }
-    defer conn.Close()
-    log.Println(" connection state ====> ", conn.GetState())
-
-    c := proto.NewTServiceClient(conn)
-
-    ctx, cancel := context.WithTimeout(context.Background(), 5 * time.Second)
-    defer cancel()
-
-    req := proto.TServiceRequest {
-        Fsyms: []string{"BTC"},
-        Tsyms: []string{"USD,EUR"},
-    }
-
-    res, err := c.Get(ctx, &req)
-    if err != nil {
-        log.Fatalf("Create user failed: %v", err)
-    }
-    log.Printf("Get info: <%+v>\n\n", res)
 }

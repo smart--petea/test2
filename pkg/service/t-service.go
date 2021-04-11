@@ -10,6 +10,7 @@ import (
     "google.golang.org/grpc"
 
     "github.com/smart--petea/test2/pkg/proto"
+    "github.com/smart--petea/test2/pkg/common"
     "flag"
     "fmt"
     "os"
@@ -19,6 +20,10 @@ import (
     "io/ioutil"
     "encoding/json"
 )
+
+func init() {
+    common.ConfigLog("service")
+}
 
 // tServiceServer is implementation of proto.TServiceServer proto interface
 type tServiceServer struct {
@@ -79,58 +84,19 @@ func (t *tServiceServer) Get(ctx context.Context, req *proto.TServiceRequest) (*
     defer resp.Body.Close()
     body, err := ioutil.ReadAll(resp.Body)
     if err != nil {
+        //todo
         panic(err)
     }
-    log.Printf("response %+v", string(body))
 
-    var rawDisplay struct{
-        RAW string
-        DISPLAY string
-    }
-    err = json.Unmarshal(body, &rawDisplay)
+    var tServiceResponse proto.TServiceResponse
+    err = json.Unmarshal(body, &tServiceResponse)
     if err != nil {
         //todo
         fmt.Printf("%+v", err)
         panic(err)
     }
-    log.Printf("rawDisplay %+v", rawDisplay)
-    
 
-    rawCurrencies := make(map[string]*proto.TRawCurrency)
-    rawCurrencies["USD"] = &proto.TRawCurrency{
-        Price: 60600.96,
-        Lastupdate:1618053792,
-        Volume24Hour:33535.97002894,
-        Volume24Hourto: 1995648478.1027222,
-        Open24Hour: 58508.56,
-        High24Hour: 61217.34,
-        Low24Hour: 57862.88,
-        Change24Hour: 2092.4000000000015, 
-        Changepct24Hour: 3.5762288458304243,
-        Supply: 18678725,
-        Mktcap: 1131948666576,
-    }
-    raw := make(map[string]*proto.TRaw)
-    raw["BTC"] = &proto.TRaw{Currencies: rawCurrencies}
-
-    displayCurrencies := make(map[string]*proto.TDisplayCurrency)
-    displayCurrencies["USD"] = &proto.TDisplayCurrency{
-        Price: 60600.96,
-        Volume24Hour:33535.97002894,
-        Volume24Hourto: 1995648478.1027222,
-        Open24Hour: 58508.56,
-        High24Hour: 61217.34,
-        Low24Hour: 57862.88,
-        Change24Hour: 2092.4000000000015, 
-        Changepct24Hour: 3.5762288458304243,
-    }
-    display := make(map[string]*proto.TDisplay)
-    display["BTC"] = &proto.TDisplay{Currencies: displayCurrencies}
-
-    return &proto.TServiceResponse{
-        Raw: raw,
-        Display: display,
-    }, nil
+    return &tServiceResponse, nil
 }
 
 type Config struct {
