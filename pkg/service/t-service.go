@@ -56,8 +56,12 @@ func (t *tServiceServer) Get(ctx context.Context, req *proto.TServiceRequest) (*
 
     tServiceResponse, err := GetFromHttp(ctx, fsyms, tsyms)
     if err != nil {
-        //return GetFromDB(fsyms, tsyms)
-        panic(err)
+        log.Printf("http request encountered error %+v", err)
+
+        tServiceResponse, err = DbGetTServiceResponse(ctx, t.db, req.Fsyms, req.Tsyms)
+        if err != nil {
+            return nil, status.Error(codes.Internal, err.Error())
+        }
     }
 
     return tServiceResponse, nil
@@ -230,6 +234,59 @@ func DbGetNextId(ctx context.Context, db *sql.DB) (int, error) {
     }
 
     return id, nil
+}
+
+func DbGetTServiceResponse(ctx context.Context, db *sql.DB, Fsyms []string, Tsyms []string) (*proto.TServiceResponse, error) {
+    fsyms := "'" + strings.Join(Fsyms, "','") + "'"
+    tsyms := "'" + strings.Join(Tsyms, "','") + "'"
+    query := fmt.Sprintf("SELECT fsym, tsym, raw, display FROM pairs WHERE (NOW() - interval '2 minutes') < updated_at AND fsym in (%s) AND tsym in (%s) ", fsyms, tsyms)
+    rows, err := db.QueryContext(ctx, query)
+    if err != nil {
+        return nil, err
+    }
+    defer rows.Close()
+
+    var tServiceResponse proto.TServiceResponse
+    var raw, display, fsym, tsym string
+    for rows.Next() {
+        if err := rows.Scan(&fsym, &tsym, &raw, &display); err != nil {
+            return nil, err
+        }
+
+        var tRawCurrency proto.TRawCurrency
+        if err := json.Unmarshal([]byte(raw), &tRawCurrency); err != nil {
+            return nil, err
+        }
+
+        var tDisplayCurrency proto.TDisplayCurrency
+        if err := json.Unmarshal([]byte(display), &tDisplayCurrency); err != nil {
+            return nil, err
+        }
+
+        if tServiceResponse.RAW == nil {
+            tServiceResponse.RAW = make(map[string]*proto.TRaw)
+        }
+
+        if tServiceResponse.DISPLAY == nil {
+            tServiceResponse.DISPLAY = make(map[string]*proto.TDisplay)
+        }
+
+        if _, ok := tServiceResponse.RAW[fsym]; !ok  {
+            var tRaw proto.TRaw
+            tRaw.Currencies = make(map[string]*proto.TRawCurrency)
+            tServiceResponse.RAW[fsym] = &tRaw
+        }
+        tServiceResponse.RAW[fsym].Currencies[tsym] = &tRawCurrency
+
+        if _, ok := tServiceResponse.DISPLAY[fsym]; !ok  {
+            var tDisplay proto.TDisplay
+            tDisplay.Currencies = make(map[string]*proto.TDisplayCurrency)
+            tServiceResponse.DISPLAY[fsym] = &tDisplay
+        }
+        tServiceResponse.DISPLAY[fsym].Currencies[tsym] = &tDisplayCurrency
+    }
+
+    return &tServiceResponse, nil
 }
 
 func DbGetIdFsymTsym(ctx context.Context, db *sql.DB, fsym, tsym string) (int, error) {
