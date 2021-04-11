@@ -4,10 +4,10 @@ import (
     "log"
     "context"
     "database/sql"
-    //"github.com/golang/protobuf/ptypes/empty"
-    //"google.golang.org/grpc/codes"
-    //"google.golang.org/grpc/status"
+    "google.golang.org/grpc/codes"
+    "google.golang.org/grpc/status"
     "google.golang.org/grpc"
+    _ "github.com/lib/pq"
 
     "github.com/smart--petea/test2/pkg/proto"
     "github.com/smart--petea/test2/pkg/common"
@@ -33,19 +33,12 @@ func init() {
     }
 }
 
-// tServiceServer is implementation of proto.TServiceServer proto interface
 type tServiceServer struct {
     db *sql.DB
 }
 
-/*
-func NewUserServiceServer(db *sql.DB) proto.UserServiceServer {
-    return &userServiceServer{db: db}
-}
-*/
-
-func NewTServiceServer() proto.TServiceServer {
-    return &tServiceServer{}
+func NewTServiceServer(db *sql.DB) proto.TServiceServer {
+    return &tServiceServer{db:db}
 }
 
 // connect returns SQL database connection from the pool
@@ -83,81 +76,164 @@ func (t *tServiceServer) Get(ctx context.Context, req *proto.TServiceRequest) (*
     }, nil
     */
 
+    if err := ValidateFsyms(req.Fsyms); err != nil {
+        return nil, status.Error(codes.InvalidArgument, err.Error())
+    }
+
+    if err := ValidateTsyms(req.Tsyms); err != nil {
+        return nil, status.Error(codes.InvalidArgument, err.Error())
+    }
+
     fsyms := strings.Join(req.Fsyms, ",")
     tsyms := strings.Join(req.Tsyms, ",")
-    url := fmt.Sprintf("https://min-api.cryptocompare.com/data/pricemultifull?fsyms=%s&tsyms=%s", fsyms, tsyms)
-    resp, err := http.Get(url)
+
+    tServiceResponse, err := GetFromHttp(ctx, fsyms, tsyms)
     if err != nil {
-        //todo
-        //1. ask the db for the last info
+        //return GetFromDB(fsyms, tsyms)
         panic(err)
     }
+
+    return tServiceResponse, nil
+}
+
+func ValidateFsyms(fsyms []string) error {
+    cFsyms := viper.GetStringSlice("currencies.fsyms")
+
+    FSYMS_OUTER_LOOP:
+    for _, fsym := range fsyms {
+        for _, cfsym := range cFsyms {
+            if fsym == cfsym {
+                continue FSYMS_OUTER_LOOP
+            }
+        }
+
+        return fmt.Errorf("fsym '%s' is not allowed", fsym)
+    }
+
+    return nil
+}
+
+func ValidateTsyms(tsyms []string) error {
+    cTsyms := viper.GetStringSlice("currencies.tsyms")
+
+    TSYMS_OUTER_LOOP:
+    for _, tsym := range tsyms {
+        for _, ctsym := range cTsyms {
+            if tsym == ctsym {
+                continue TSYMS_OUTER_LOOP
+            }
+        }
+
+        return fmt.Errorf("tsym '%s' is not allowed", tsym)
+    }
+
+    return nil
+}
+
+func GetFromHttp(ctx context.Context, fsyms, tsyms string) (*proto.TServiceResponse, error) {
+    url := fmt.Sprintf("https://min-api.cryptocompare.com/data/pricemultifull?fsyms=%s&tsyms=%s", fsyms, tsyms)
+    req, err := http.NewRequest("GET", url, nil)
+    if err != nil {
+        return nil, err
+    }
+    req = req.WithContext(ctx)
+
+    resp, err := http.DefaultClient.Do(req)
+    if err != nil {
+        return nil, err
+    }
     defer resp.Body.Close()
+
     body, err := ioutil.ReadAll(resp.Body)
     if err != nil {
-        //todo
-        panic(err)
+        return nil, err
     }
 
     var tServiceResponse proto.TServiceResponse
     err = json.Unmarshal(body, &tServiceResponse)
     if err != nil {
-        //todo
-        fmt.Printf("%+v", err)
-        panic(err)
+        return nil, err
     }
 
     return &tServiceResponse, nil
 }
 
-/*
-type Config struct {
-    GRPCPort string
-    DatastoreDBHost string
-    DatastoreDBUser string
-    DatastoreDBPassword string
-    DatastoreDBSchema string
-}
-*/
-
 func Run() error {
+    if err := ValidateConfiguration(); err != nil {
+        return err
+    }
+
+    db, err := GetDB()
+    if err != nil {
+        return err
+    }
+    defer db.Close()
+
+    protoAPI := NewTServiceServer(db)
     ctx := context.Background()
 
-    /*
-    var cfg Config
-    flag.StringVar(&cfg.GRPCPort, "grpc-port", "", "gRPC port to bind")
-    flag.StringVar(&cfg.DatastoreDBHost, "db-host", "", "Database host")
-    flag.StringVar(&cfg.DatastoreDBUser, "db-user", "", "Database user")
-    flag.StringVar(&cfg.DatastoreDBPassword, "db-password", "", "Database password")
-    flag.StringVar(&cfg.DatastoreDBSchema, "db-schema", "", "Database schema")
-    flag.Parse()
-    */
+    //RunScheduler(ctx)
+    return RunServer(ctx, protoAPI)
+}
 
-    /*
-    param := "parseTime=true"
+func ValidateConfiguration() error {
+    fsyms := viper.GetStringSlice("currencies.fsyms")
+    if len(fsyms) == 0 {
+        return fmt.Errorf("currencies.fsyms is empty. Please config it")
+    }
 
-    dsn := fmt.Sprintf("%s:%s@tcp(%s)/%s?%s",
-        cfg.DatastoreDBUser,
-        cfg.DatastoreDBPassword,
-        cfg.DatastoreDBHost,
-        cfg.DatastoreDBSchema,
-        param)
-    db, err := sql.Open("postgres", dsn)
+    tsyms := viper.GetStringSlice("currencies.tsyms")
+    if len(tsyms) == 0 {
+        return fmt.Errorf("currencies.tsyms is empty. Please config it")
+    }
+
+    return nil
+}
+
+func GetDB() (*sql.DB, error) {
+    psqlHost := viper.GetString("db.host")
+    psqlPort := viper.GetInt("db.port")
+    psqlUser := viper.GetString("db.user")
+    psqlPassword := viper.GetString("db.password")
+    psqlDbname := viper.GetString("db.name")
+    psqlInfo := fmt.Sprintf("host=%s port=%d user=%s password=%s dbname=%s sslmode=disable", psqlHost, psqlPort, psqlUser, psqlPassword, psqlDbname)
+    db, err := sql.Open("postgres", psqlInfo)
     if err != nil {
-        return fmt.Errorf("failed to open database: %v", err)
+        return nil, err
     }
 
     if err = db.Ping(); err != nil {
-        panic(err.Error())
+        return nil, err
     }
-    defer db.Close()
-    protoAPI := proto.NewUserServiceServer(db)
-    */
 
-    protoAPI := NewTServiceServer()
-
-    return RunServer(ctx, protoAPI)
+    return db, nil
 }
+
+/*
+func RunScheduler(ctx context.Context, db *sql.DB) error {
+    interval := viper.GetInt("scheduler.interval", 0)
+    if interval < 1 {
+        return fmt.Errorf("Wrong scheduler interval %d", interval)
+    }
+
+    ticker := time.NewTicker(interval * timeSecond)
+    log.Printf("starting Scheduler at interval %d seconds", interval)
+    go func() {
+        for {
+            select {
+            case <- ticker.C:
+
+            case <- ctx.Done():
+                ticker.Stop()
+                log.Printf("shutting down Scheduler")
+                return
+            }
+        }
+    }
+
+    return nil
+}
+*/
 
 func RunServer(ctx context.Context, protoAPI proto.TServiceServer) error {
     grpcHost := viper.GetString("grpc.host")

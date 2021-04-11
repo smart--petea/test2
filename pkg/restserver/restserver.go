@@ -5,10 +5,13 @@ import (
     "google.golang.org/grpc"
     "github.com/smart--petea/test2/pkg/proto"
     "github.com/smart--petea/test2/pkg/common"
+    "google.golang.org/grpc/codes"
+    "google.golang.org/grpc/status"
     "github.com/gin-gonic/gin"
     "time"
     "strings"
     "github.com/spf13/viper"
+    "log"
 )
 
 func init() {
@@ -43,8 +46,21 @@ func Run() error {
 
         serviceRes, err := serviceCall(Fsyms, Tsyms)
         if err != nil {
-            c.JSON(500, gin.H{"msg": err.Error()})
-            return
+            st, ok := status.FromError(err)
+            if !ok {
+                c.JSON(500, gin.H{"msg": err.Error()})
+                return
+            }
+
+            switch st.Code() {
+            case codes.InvalidArgument:
+                c.JSON(400, gin.H{"msg": st.Message()})
+                return
+            default:
+                log.Printf("Unknows status error code='%+v' message='%s'", st.Code(), st.Message())
+                c.JSON(500, gin.H{"msg": st.Message()})
+                return
+            }
         }
 
         c.JSON(200, serviceRes)
