@@ -18,14 +18,10 @@ func (t *TServiceResponse) UnmarshalJSON(data []byte) error {
         return err
     }
 
-    /*
     err = t.FillDisplay(rawDisplay["DISPLAY"])
     if err != nil {
         return err
     }
-    */
-
-    panic("ok")
 
     return nil
 }
@@ -39,27 +35,35 @@ func (t *TServiceResponse) FillRaw(rawRaw interface{}) error {
     t.RAW = make(map[string]*TRaw)
 
     for fsym, tsymsRaw := range raw {
-        err := t.FillRawTsyms(fsym, tsymsRaw)
+        var tRaw TRaw
+        err := tRaw.FillTsyms(tsymsRaw)
         if err != nil {
             return err
         }
+
+        t.RAW[fsym] = &tRaw
     }
 
     return nil
 }
 
-func (t *TServiceResponse) FillRawTsyms(fsym string, tsymsRaw interface{}) error {
-    tsyms, ok := tsymsRaw.(map[string]interface{})
+func (t *TServiceResponse) FillDisplay(displayRaw interface{}) error {
+    display, ok := displayRaw.(map[string]interface{})
     if !ok {
-        return fmt.Errorf("[RAW] fsym=%s tsyms=%+v can't be converted in map[string]interface{}", fsym, tsymsRaw)
+        return fmt.Errorf("DISPLAY part can't be parsed by json")
     }
 
-    //t.RAW[fsym] = make(TRaw)
-    err := t.RAW[fsym].FillTsyms(tsyms)
-    return err
-}
+    t.DISPLAY = make(map[string]*TDisplay)
 
-/*
-func (t *TServiceResponse) FillDisplay(display interface{}) error {
+    for fsym, tsymsRaw := range display {
+        var tDisplay TDisplay
+        err := tDisplay.FillTsyms(tsymsRaw)
+        if err != nil {
+            return err
+        }
+
+        t.DISPLAY[fsym] = &tDisplay
+    }
+
+    return nil
 }
-*/

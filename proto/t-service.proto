@@ -26,13 +26,16 @@ message TRaw {
 
 message TDisplayCurrency {
     string PRICE = 1;
-    string VOLUME24HOUR = 2;
-    string VOLUME24HOURTO = 3;
-    string OPEN24HOUR = 4;
-    string HIGH24HOUR = 5;
-    string LOW24HOUR = 6;
-    string CHANGE24HOUR = 7;
-    string CHANGEPCT24HOUR = 8;
+    string LASTUPDATE = 2;
+    string VOLUME24HOUR = 3;
+    string VOLUME24HOURTO = 4;
+    string OPEN24HOUR = 5;
+    string HIGH24HOUR = 6;
+    string LOW24HOUR = 7;
+    string CHANGE24HOUR = 8;
+    string CHANGEPCT24HOUR = 9;
+    string SUPPLY = 10;
+    string MKTCAP = 11;
 }
 
 message TDisplay {
