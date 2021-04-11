@@ -5,6 +5,24 @@ import (
     "fmt"
 )
 
+func (t TServiceResponse) MarshalJSON() ([]byte, error) {
+    rawFsymsTsyms := make(map[string]interface{})
+    for fsym, raw := range t.RAW {
+        rawFsymsTsyms[fsym] = raw.Currencies
+    }
+
+    displayFsymsTsyms := make(map[string]interface{})
+    for fsym, display := range t.DISPLAY {
+        displayFsymsTsyms[fsym] = display.Currencies
+    }
+
+    all := make(map[string]interface{})
+    all["DISPLAY"] = displayFsymsTsyms
+    all["RAW"] = rawFsymsTsyms
+
+    return json.Marshal(all)
+}
+
 func (t *TServiceResponse) UnmarshalJSON(data []byte) error {
     rawDisplay := make(map[string]interface{})
 
