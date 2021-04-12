@@ -6,3 +6,6 @@ run-service:
 
 run-rest-server:
 	go run cmd/rest-server/main.go
+
+run-ws-server:
+	go run cmd/ws-server/main.go

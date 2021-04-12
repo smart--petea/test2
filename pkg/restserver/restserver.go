@@ -1,14 +1,11 @@
 package restserver
 
 import (
-    "context"
-    "google.golang.org/grpc"
     "github.com/smart--petea/test2/pkg/proto"
     "github.com/smart--petea/test2/pkg/common"
     "google.golang.org/grpc/codes"
     "google.golang.org/grpc/status"
     "github.com/gin-gonic/gin"
-    "time"
     "strings"
     "github.com/spf13/viper"
     "log"
@@ -44,7 +41,7 @@ func Run() error {
         Fsyms := strings.Split(fsyms, ",")
         Tsyms := strings.Split(tsyms, ",")
 
-        serviceRes, err := serviceCall(Fsyms, Tsyms)
+        serviceRes, err := proto.ServiceCall(Fsyms, Tsyms)
         if err != nil {
             st, ok := status.FromError(err)
             if !ok {
@@ -68,30 +65,8 @@ func Run() error {
 
     httpHost := viper.GetString("http.host")
     httpPort := viper.GetString("http.port")
-    httpAddress := httpHost + ":" + httpPort 
+    httpAddress := httpHost + ":" + httpPort
     ginServer.Run(httpAddress)
 
     return nil
-}
-
-func serviceCall(fsyms, tsyms []string) (*proto.TServiceResponse, error) {
-    grpcHost := viper.GetString("grpc.host")
-    grpcPort := viper.GetString("grpc.port")
-    grpcAddress := grpcHost + ":" +  grpcPort
-
-    serviceConn, err := grpc.Dial(grpcAddress, grpc.WithInsecure())
-    if err != nil {
-        return nil, err
-    }
-    defer serviceConn.Close()
-
-
-    service := proto.NewTServiceClient(serviceConn)
-    ctx, cancel := context.WithTimeout(context.Background(), 5 * time.Second)
-    defer cancel()
-
-    return service.Get(ctx, &proto.TServiceRequest{
-        Fsyms: fsyms,
-        Tsyms: tsyms,
-    })
 }
